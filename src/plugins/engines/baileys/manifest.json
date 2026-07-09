@@ -1,0 +1,26 @@
+{
+    "id": "baileys",
+    "name": "Baileys Engine",
+    "version": "1.0.0",
+    "type": "engine",
+    "description": "Lightweight WhatsApp engine using @whiskeysockets/baileys — no Chromium required, ~5x lower memory usage",
+    "author": "OpenWA Team",
+    "main": "index.ts",
+    "provides": [
+        "whatsapp-engine",
+        "text-messages",
+        "media-messages",
+        "group-management"
+    ],
+    "configSchema": {
+        "type": "object",
+        "properties": {
+            "sessionDataPath": {
+                "type": "string",
+                "title": "Session Data Path",
+                "description": "Path to store Baileys auth session files",
+                "default": "./data/sessions"
+            }
+        }
+    }
+}
