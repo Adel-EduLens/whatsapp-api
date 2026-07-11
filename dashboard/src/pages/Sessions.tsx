@@ -149,15 +149,38 @@ export function Sessions() {
   const handleStart = async (id: string) => {
     const session = sessions.find(s => s.id === id);
     if (session && ['initializing', 'connecting', 'qr_ready'].includes(session.status)) {
-      handleShowQR(id);
+      if (session.status === 'qr_ready') handleShowQR(id);
       return;
     }
 
     try {
       await sessionApi.start(id);
       setSessions(sessions.map(s => (s.id === id ? { ...s, status: 'connecting' } : s)));
-      await fetchSessions();
-      handleShowQR(id);
+      // Poll session status — only open QR modal if qr_ready, otherwise it reconnects on its own
+      const sessionName = session?.name || '';
+      let attempts = 0;
+      const maxAttempts = 20;
+      const poll = async () => {
+        while (attempts < maxAttempts) {
+          await new Promise(r => setTimeout(r, 1500));
+          try {
+            const updated = await sessionApi.get(id);
+            if (updated.status === 'ready') {
+              // Connected with saved credentials — no QR needed
+              setSessions(prev => prev.map(s => (s.id === id ? { ...s, status: 'ready' } : s)));
+              toast.success(t('sessions.toasts.readyTitle'), t('sessions.toasts.readyDesc'));
+              return;
+            }
+            if (updated.status === 'qr_ready') {
+              // Needs a fresh QR scan
+              setQrData({ sessionId: id, sessionName, qrCode: '' });
+              return;
+            }
+          } catch { /* ignore and retry */ }
+          attempts++;
+        }
+      };
+      poll();
     } catch (err) {
       console.error('Failed to start:', err);
       await fetchSessions();
@@ -170,14 +193,46 @@ export function Sessions() {
   const handleShowQR = async (id: string) => {
     const session = sessions.find(s => s.id === id);
     const sessionName = session?.name || '';
-    try {
-      const qr = await sessionApi.getQR(id);
-      setQrData({ sessionId: id, sessionName, qrCode: qr.qrCode });
-    } catch (err) {
-      console.error('Failed to get QR:', err);
-      setError(t('sessions.qr.unavailable'));
-    }
+    // Open modal immediately with spinner, then poll for QR
+    setQrData({ sessionId: id, sessionName, qrCode: '' });
   };
+
+  // Poll for QR code when qrData is set but qrCode is empty
+  useEffect(() => {
+    if (!qrData || qrData.qrCode) return;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    const poll = async () => {
+      while (attempts < maxAttempts && !cancelled) {
+        try {
+          const qr = await sessionApi.getQR(qrData.sessionId);
+          if (!cancelled) {
+            if (qr.status === 'ready') {
+              setQrData(null);
+              fetchSessions();
+              return;
+            }
+            setQrData(prev => prev ? { ...prev, qrCode: qr.qrCode } : null);
+            return;
+          }
+        } catch {
+          attempts++;
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+      if (!cancelled && attempts >= maxAttempts) {
+        setQrData(null);
+        setError(t('sessions.qr.unavailable'));
+      }
+    };
+
+    poll();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrData?.sessionId, qrData?.qrCode]);
+
 
   const handleStop = async (id: string) => {
     try {
