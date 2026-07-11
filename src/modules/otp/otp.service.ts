@@ -138,23 +138,44 @@ export class OtpService implements OnModuleInit {
    * Returns true if a match was found and verified.
    */
   async handleIncomingMessage(sessionId: string, from: string, body: string): Promise<boolean> {
-    // Normalize the sender: "628123456789@c.us" → "+628123456789"
+    // Normalize the sender: "628123456789" or "628123456789@c.us" → "+628123456789"
     const senderPhone = this.normalizeWhatsAppId(from);
-    if (!senderPhone) return false;
+    if (!senderPhone) {
+      this.logger.log(`OTP: could not normalize sender "${from}"`, { action: 'otp_normalize_failed' });
+      return false;
+    }
 
     const code = body.trim();
 
-    // Find a pending OTP matching this phone + code + session
-    const otp = await this.otpRepository.findOne({
+    this.logger.log(`OTP: checking message from=${from} normalized=${senderPhone} code="${code}" session=${sessionId}`, {
+      action: 'otp_check',
+    });
+
+    // Find pending OTPs matching this code + session
+    const otps = await this.otpRepository.find({
       where: {
-        phone: senderPhone,
         code,
         sessionId,
         status: OtpStatus.PENDING,
       },
     });
 
-    if (!otp) return false;
+    let otp = otps.find(o => o.phone === senderPhone);
+
+    // Fallback: if sender is a LID (or doesn't match) and there is exactly 1 pending OTP for this code
+    if (!otp && otps.length === 1) {
+      otp = otps[0];
+      this.logger.log(`OTP: matched by code only (sender=${senderPhone}, expected=${otp.phone})`, {
+        action: 'otp_fallback_match',
+      });
+    }
+
+    if (!otp) {
+      this.logger.log(`OTP: no matching pending OTP found for phone=${senderPhone} code="${code}" session=${sessionId}`, {
+        action: 'otp_no_match',
+      });
+      return false;
+    }
 
     // Check if expired
     if (new Date() > otp.expiresAt) {
@@ -320,12 +341,15 @@ export class OtpService implements OnModuleInit {
   }
 
   /**
-   * Convert WhatsApp JID "628123456789@c.us" to E.164 "+628123456789"
+   * Convert a phone identifier to E.164 format.
+   * Handles both raw JID ("628123456789@c.us") and
+   * pre-stripped number ("628123456789") from the Baileys adapter.
    */
   private normalizeWhatsAppId(jid: string): string | null {
-    const match = jid.match(/^(\d+)@/);
-    if (!match) return null;
-    return `+${match[1]}`;
+    // Strip @c.us / @s.whatsapp.net suffix if present, then any :device suffix
+    const number = jid.split('@')[0].split(':')[0];
+    if (!number || !/^\d+$/.test(number)) return null;
+    return `+${number}`;
   }
 
   private delay(ms: number): Promise<void> {

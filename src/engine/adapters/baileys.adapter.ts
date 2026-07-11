@@ -62,6 +62,8 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
   private saveCreds: (() => Promise<void>) | null = null;
   private shouldReconnect = false;
   private contacts: Map<string, Contact> = new Map();
+  // LID → phone number mapping (e.g. "169419766538483" → "201119915593")
+  private lidToPhone: Map<string, string> = new Map();
 
   constructor(private readonly config: BaileysConfig) {
     super();
@@ -92,6 +94,9 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
 
       const sessionPath = path.resolve(this.config.sessionDataPath, this.config.sessionId);
       fs.mkdirSync(sessionPath, { recursive: true });
+
+      // Load persisted LID→phone map from previous sessions
+      this.loadLidMap();
 
       const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
       this.saveCreds = saveCreds;
@@ -178,10 +183,16 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
         const messages = m.messages as any[];
         const type = m.type as string;
 
+        this.logger.log(`messages.upsert: type=${type} count=${messages?.length ?? 0}`);
+
         if (type !== 'notify') return;
 
         for (const msg of messages) {
-          if (!msg.message || msg.key?.fromMe) continue;
+          if (!msg.message || msg.key?.fromMe) {
+            this.logger.log(`Skipping message: hasMessage=${!!msg.message} fromMe=${msg.key?.fromMe} jid=${msg.key?.remoteJid}`);
+            continue;
+          }
+          this.logger.log(`Processing message: remoteJid=${msg.key?.remoteJid} participant=${msg.key?.participant} pushName=${msg.pushName} verifiedBizName=${msg.verifiedBizName} keys=${Object.keys(msg).join(',')}`);
 
           try {
             const parsed = await this.parseMessage(msg, { isJidGroup, downloadMediaMessage, getContentType });
@@ -192,6 +203,19 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
             this.logger.error('Error processing incoming message', String(error));
           }
         }
+      });
+
+      // Track LID → phone number mapping from contact events
+      this.sock.ev.on('messaging-history.set', (data: { contacts: { id: string; lid?: string; jid?: string }[] }) => {
+        if (data.contacts?.length) {
+          this.updateLidMap(data.contacts);
+        }
+      });
+      this.sock.ev.on('contacts.upsert', (contacts: { id: string; lid?: string; jid?: string }[]) => {
+        this.updateLidMap(contacts);
+      });
+      this.sock.ev.on('contacts.update', (contacts: { id: string; lid?: string; jid?: string }[]) => {
+        this.updateLidMap(contacts);
       });
 
     } catch (error) {
@@ -302,7 +326,76 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
 
   private jidToNumber(jid: string): string {
     if (!jid) return '';
-    return jid.split('@')[0].split(':')[0];
+    const number = jid.split('@')[0].split(':')[0];
+    // If this is a LID, resolve to actual phone number
+    if (jid.endsWith('@lid')) {
+      const resolved = this.lidToPhone.get(number);
+      if (resolved) {
+        return resolved;
+      }
+      this.logger.warn(`Could not resolve LID ${number} to phone number`);
+    }
+    return number;
+  }
+
+  private updateLidMap(contacts: { id: string; lid?: string; jid?: string }[]): void {
+    let added = 0;
+    for (const contact of contacts) {
+      const lid = contact.lid ? contact.lid.split('@')[0].split(':')[0] : null;
+      const jid = contact.jid ? contact.jid.split('@')[0].split(':')[0] : null;
+
+      // Map LID → phone from contact.lid + contact.jid
+      if (lid && jid) {
+        if (!this.lidToPhone.has(lid)) added++;
+        this.lidToPhone.set(lid, jid);
+      }
+
+      // Also handle case where contact.id is LID and contact.jid has the phone
+      if (contact.id?.endsWith('@lid') && jid) {
+        const idNum = contact.id.split('@')[0].split(':')[0];
+        if (!this.lidToPhone.has(idNum)) added++;
+        this.lidToPhone.set(idNum, jid);
+      }
+
+      // Or contact.id is phone and contact.lid has the LID
+      if (contact.id?.endsWith('@s.whatsapp.net') && lid) {
+        const phone = contact.id.split('@')[0].split(':')[0];
+        if (!this.lidToPhone.has(lid)) added++;
+        this.lidToPhone.set(lid, phone);
+      }
+    }
+
+    if (added > 0) {
+      this.logger.log(`LID map updated: +${added} new entries (total: ${this.lidToPhone.size})`);
+      this.persistLidMap();
+    }
+  }
+
+  private get lidMapPath(): string {
+    return path.resolve(this.config.sessionDataPath, this.config.sessionId, 'lid-map.json');
+  }
+
+  private persistLidMap(): void {
+    try {
+      const data = Object.fromEntries(this.lidToPhone);
+      fs.writeFileSync(this.lidMapPath, JSON.stringify(data));
+    } catch (error) {
+      this.logger.warn('Failed to persist LID map', String(error));
+    }
+  }
+
+  private loadLidMap(): void {
+    try {
+      if (fs.existsSync(this.lidMapPath)) {
+        const data = JSON.parse(fs.readFileSync(this.lidMapPath, 'utf-8'));
+        for (const [lid, phone] of Object.entries(data)) {
+          this.lidToPhone.set(lid, phone as string);
+        }
+        this.logger.log(`LID map loaded: ${this.lidToPhone.size} entries from disk`);
+      }
+    } catch (error) {
+      this.logger.warn('Failed to load LID map', String(error));
+    }
   }
 
   private normalizeJid(jid: string): string {
