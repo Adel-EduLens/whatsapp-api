@@ -10,6 +10,7 @@ export enum AuditAction {
 
   // Session events
   SESSION_CREATED = 'session_created',
+  SESSION_UPDATED = 'session_updated',
   SESSION_STARTED = 'session_started',
   SESSION_STOPPED = 'session_stopped',
   SESSION_DELETED = 'session_deleted',

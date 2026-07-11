@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { SessionService } from './session.service';
 import { CreateSessionDto, SessionResponseDto, QRCodeResponseDto } from './dto';
@@ -26,6 +26,7 @@ export class SessionController {
       pushName: session.pushName,
       connectedAt: session.connectedAt,
       lastActive: session.lastActiveAt,
+      config: session.config,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     };
@@ -89,6 +90,28 @@ export class SessionController {
       sessionId: id,
       sessionName: session.name,
     });
+  }
+
+  @Patch(':id/config')
+  @RequireRole(ApiKeyRole.OPERATOR)
+  @ApiOperation({ summary: 'Update session configuration' })
+  @ApiParam({ name: 'id', description: 'Session ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session config updated',
+    type: SessionResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  async updateConfig(
+    @Param('id') id: string,
+    @Body() config: Record<string, unknown>,
+  ): Promise<SessionResponseDto> {
+    const session = await this.sessionService.updateConfig(id, config);
+    await this.auditService.logInfo(AuditAction.SESSION_UPDATED, {
+      sessionId: session.id,
+      sessionName: session.name,
+    });
+    return this.transformSession(session);
   }
 
   @Post(':id/start')

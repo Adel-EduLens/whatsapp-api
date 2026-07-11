@@ -19,6 +19,7 @@ export function Sessions() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newSessionName, setNewSessionName] = useState('');
+  const [newSessionAutoStart, setNewSessionAutoStart] = useState(true);
   const [creating, setCreating] = useState(false);
   const [qrData, setQrData] = useState<{ sessionId: string; sessionName: string; qrCode: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,9 +95,13 @@ export function Sessions() {
     if (!newSessionName.trim()) return;
     try {
       setCreating(true);
-      const newSession = await sessionApi.create(newSessionName);
+      const newSession = await sessionApi.create({ 
+        name: newSessionName, 
+        config: { autoStart: newSessionAutoStart } 
+      });
       setSessions([...sessions, newSession]);
       setNewSessionName('');
+      setNewSessionAutoStart(true);
       setShowCreateModal(false);
       toast.success(t('sessions.create.successTitle'), t('sessions.create.successDesc', { name: newSession.name }));
     } catch (err) {
@@ -123,6 +128,21 @@ export function Sessions() {
       toast.error(t('sessions.delete.errorTitle'), msg);
     } finally {
       setDeleteConfirmId(null);
+    }
+  };
+
+  const handleToggleAutoStart = async (id: string, currentValue: boolean) => {
+    try {
+      const newValue = !currentValue;
+      const updatedSession = await sessionApi.updateConfig(id, { autoStart: newValue });
+      setSessions(sessions.map(s => (s.id === id ? { ...s, config: updatedSession.config } : s)));
+      if (selectedSession?.id === id) {
+        setSelectedSession({ ...selectedSession, config: updatedSession.config });
+      }
+      toast.success('Success', `Auto-start has been ${newValue ? 'enabled' : 'disabled'}.`);
+    } catch (err) {
+      console.error('Failed to toggle auto-start:', err);
+      toast.error('Error', 'Failed to update auto-start configuration');
     }
   };
 
@@ -278,6 +298,20 @@ export function Sessions() {
               <p className="input-hint">
                 <Trans i18nKey="sessions.create.hint" components={{ code: <code /> }} />
               </p>
+              
+              <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="autoStartToggle"
+                  checked={newSessionAutoStart}
+                  onChange={e => setNewSessionAutoStart(e.target.checked)}
+                  style={{ width: 'auto', margin: 0, cursor: 'pointer' }}
+                />
+                <label htmlFor="autoStartToggle" style={{ margin: 0, cursor: 'pointer', fontWeight: 'normal' }}>
+                  Auto-start session when server restarts
+                </label>
+              </div>
+
               {newSessionName && !/^[a-z0-9-]+$/.test(newSessionName) && (
                 <p className="input-error">{t('sessions.create.invalidChars')}</p>
               )}
@@ -375,6 +409,21 @@ export function Sessions() {
                 <div className="detail-item">
                   <span className="detail-label">{t('sessions.details.phone')}</span>
                   <span className="detail-value">{selectedSession.phone || t('sessions.details.phoneNone')}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Auto-start</span>
+                  <span className="detail-value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input 
+                      type="checkbox" 
+                      id={`toggle-${selectedSession.id}`}
+                      checked={!!selectedSession.config?.autoStart}
+                      onChange={() => handleToggleAutoStart(selectedSession.id, !!selectedSession.config?.autoStart)}
+                      style={{ width: 'auto', margin: 0, cursor: 'pointer' }}
+                    />
+                    <label htmlFor={`toggle-${selectedSession.id}`} style={{ margin: 0, cursor: 'pointer', fontWeight: 'normal' }}>
+                      {selectedSession.config?.autoStart ? 'Enabled' : 'Disabled'}
+                    </label>
+                  </span>
                 </div>
                 <div className="detail-item">
                   <span className="detail-label">{t('sessions.details.created')}</span>

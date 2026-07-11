@@ -55,7 +55,19 @@ export function useSessionGroupsQuery(sessionId: string, enabled: boolean) {
 export function useCreateSessionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => sessionApi.create(name),
+    mutationFn: (name: string) => sessionApi.create({ name }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionStats });
+    },
+  });
+}
+
+export function useUpdateSessionConfigMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; config: Record<string, unknown> }) =>
+      sessionApi.updateConfig(params.id, params.config),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessionStats });

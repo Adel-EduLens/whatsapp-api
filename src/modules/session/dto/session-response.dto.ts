@@ -23,6 +23,9 @@ export class SessionResponseDto {
   @ApiPropertyOptional({ example: '2025-02-02T10:30:00Z' })
   lastActive?: Date | null;
 
+  @ApiPropertyOptional({ example: { autoStart: true } })
+  config?: Record<string, unknown>;
+
   @ApiProperty({ example: '2025-02-02T09:00:00Z' })
   createdAt: Date;
 

@@ -57,6 +57,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
       SessionStatus.AUTHENTICATING,
     ];
 
+    // Reset any sessions that were mid-flight on the previous run
     const result = await this.sessionRepository.update(
       { status: In(activeStatuses) },
       { status: SessionStatus.DISCONNECTED },
@@ -68,7 +69,32 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
         affected: result.affected,
       });
     }
+
+    // Check for auto-start config
+    const globalAutoStart = process.env.AUTO_START_SESSIONS === 'true';
+
+    // Find ALL sessions (including disconnected) that should auto-start
+    const allSessions = await this.sessionRepository.find();
+    const sessionsToStart = allSessions.filter(session => {
+      const config = session.config as { autoStart?: boolean } | null;
+      return globalAutoStart || config?.autoStart === true;
+    });
+
+    for (const session of sessionsToStart) {
+      this.logger.log(`Auto-starting session: ${session.name}`, {
+        action: 'startup_autostart',
+        sessionId: session.id,
+      });
+
+      // Delay slightly to let the module fully initialize before starting engines
+      setTimeout(() => {
+        this.start(session.id).catch(err => {
+          this.logger.error(`Failed to auto-start session ${session.name}`, err instanceof Error ? err.stack : String(err));
+        });
+      }, 3000);
+    }
   }
+
 
   async onModuleDestroy(): Promise<void> {
     // Clean up all engines on shutdown
@@ -137,6 +163,12 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
       throw new NotFoundException(`Session with id '${id}' not found`);
     }
     return session;
+  }
+
+  async updateConfig(id: string, config: Record<string, unknown>): Promise<Session> {
+    const session = await this.findOne(id);
+    session.config = { ...session.config, ...config };
+    return this.sessionRepository.save(session);
   }
 
   async findByName(name: string): Promise<Session> {

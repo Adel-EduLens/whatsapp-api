@@ -44,6 +44,7 @@ services:
       - DATABASE_SYNCHRONIZE=${DATABASE_SYNCHRONIZE:-false}
       # Engine
       - ENGINE_TYPE=${ENGINE_TYPE:-whatsapp-web.js}
+      - AUTO_START_SESSIONS=${AUTO_START_SESSIONS:-true}
       - SESSION_DATA_PATH=/app/data/sessions
       - PUPPETEER_HEADLESS=${PUPPETEER_HEADLESS:-true}
       - PUPPETEER_ARGS=${PUPPETEER_ARGS:---no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu}

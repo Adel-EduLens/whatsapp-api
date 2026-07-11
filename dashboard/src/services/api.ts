@@ -14,6 +14,7 @@ export interface Session {
   phone?: string;
   pushName?: string;
   lastActive?: string;
+  config?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -178,10 +179,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 export const sessionApi = {
   list: () => request<Session[]>('/sessions'),
   get: (id: string) => request<Session>(`/sessions/${id}`),
-  create: (name: string) =>
+  create: (data: { name: string; config?: Record<string, unknown>; proxyUrl?: string; proxyType?: string }) =>
     request<Session>('/sessions', {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(data),
+    }),
+  updateConfig: (id: string, config: Record<string, unknown>) =>
+    request<Session>(`/sessions/${id}/config`, {
+      method: 'PATCH',
+      body: JSON.stringify(config),
     }),
   delete: (id: string) => request<void>(`/sessions/${id}`, { method: 'DELETE' }),
   start: (id: string) => request<Session>(`/sessions/${id}/start`, { method: 'POST' }),
