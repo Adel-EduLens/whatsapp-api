@@ -61,6 +61,7 @@
     "messageTester": "Message Tester",
     "infrastructure": "Infrastructure",
     "plugins": "Plugins",
+    "otpLogs": "OTP Logs",
     "logs": "Logs"
   },
   "errorBoundary": {

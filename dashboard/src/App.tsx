@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m
 const Sessions = lazy(() => import('./pages/Sessions').then(m => ({ default: m.Sessions })));
 const Webhooks = lazy(() => import('./pages/Webhooks').then(m => ({ default: m.Webhooks })));
 const Logs = lazy(() => import('./pages/Logs').then(m => ({ default: m.Logs })));
+const OtpLogs = lazy(() => import('./pages/OtpLogs').then(m => ({ default: m.OtpLogs })));
 const ApiKeys = lazy(() => import('./pages/ApiKeys').then(m => ({ default: m.ApiKeys })));
 const MessageTester = lazy(() => import('./pages/MessageTester').then(m => ({ default: m.MessageTester })));
 const Infrastructure = lazy(() => import('./pages/Infrastructure').then(m => ({ default: m.Infrastructure })));
@@ -104,6 +105,7 @@ function AppContent() {
             <Route path="webhooks" element={<Webhooks />} />
             {role === 'admin' && <Route path="api-keys" element={<ApiKeys />} />}
             <Route path="logs" element={<Logs />} />
+            <Route path="otp-logs" element={<OtpLogs />} />
             <Route path="message-tester" element={<MessageTester />} />
             <Route path="infrastructure" element={<Infrastructure />} />
             {role === 'admin' && <Route path="plugins" element={<Plugins />} />}

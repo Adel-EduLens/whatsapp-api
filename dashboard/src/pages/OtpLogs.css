@@ -1,0 +1,168 @@
+.otp-logs-page {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.filters-bar {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  background: var(--surface-2);
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.otp-stats-bar {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.otp-stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+  min-width: 150px;
+}
+
+.otp-stat-chip:hover {
+  background: var(--surface-3);
+}
+
+.otp-stat-chip.active {
+  background: var(--surface-active, rgba(59, 130, 246, 0.1));
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.otp-stat-chip strong {
+  margin-left: auto;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+/* Specific colors for chips when active */
+.otp-stat-chip.active.pending { border-color: #eab308; color: #eab308; background: rgba(234, 179, 8, 0.1); }
+.otp-stat-chip.active.pending strong { color: #eab308; }
+
+.otp-stat-chip.active.verified { border-color: #22c55e; color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+.otp-stat-chip.active.verified strong { color: #22c55e; }
+
+.otp-stat-chip.active.expired { border-color: #f97316; color: #f97316; background: rgba(249, 115, 22, 0.1); }
+.otp-stat-chip.active.expired strong { color: #f97316; }
+
+.otp-stat-chip.active.cancelled { border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+.otp-stat-chip.active.cancelled strong { color: #ef4444; }
+
+
+.otp-table-container {
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.otp-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.otp-table th {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.otp-table td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  vertical-align: middle;
+}
+
+.otp-table tr:last-child td {
+  border-bottom: none;
+}
+
+.otp-table tr:hover td {
+  background: var(--surface-2);
+}
+
+.otp-empty {
+  text-align: center;
+  padding: 4rem 1rem !important;
+  color: var(--text-muted);
+}
+
+.otp-empty svg {
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.otp-empty p {
+  font-size: 1.125rem;
+  margin: 0;
+}
+
+/* Status Badges */
+.otp-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.otp-status-badge.pending { background: rgba(234, 179, 8, 0.15); color: #eab308; }
+.otp-status-badge.verified { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.otp-status-badge.expired { background: rgba(249, 115, 22, 0.15); color: #f97316; }
+.otp-status-badge.cancelled { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+.otp-code {
+  background: var(--surface-3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.875rem;
+  letter-spacing: 1px;
+}
+
+.otp-phone {
+  font-weight: 500;
+}
+
+.otp-none {
+  color: var(--text-muted);
+}
+
+.otp-overdue {
+  color: #ef4444 !important;
+  font-weight: 500;
+}
+
+.otp-verified-time {
+  color: #22c55e;
+}

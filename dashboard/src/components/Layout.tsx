@@ -7,6 +7,7 @@ import {
   Webhook,
   Key,
   FileText,
+  ShieldCheck,
   LogOut,
   Send,
   Server,
@@ -38,6 +39,7 @@ const allNavItems = [
   { to: '/message-tester', icon: Send, key: 'messageTester' as const, adminOnly: false },
   { to: '/infrastructure', icon: Server, key: 'infrastructure' as const, adminOnly: false },
   { to: '/plugins', icon: Puzzle, key: 'plugins' as const, adminOnly: true },
+  { to: '/otp-logs', icon: ShieldCheck, key: 'otpLogs' as const, adminOnly: false },
   { to: '/logs', icon: FileText, key: 'logs' as const, adminOnly: false },
 ];
 

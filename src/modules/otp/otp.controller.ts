@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { OtpService } from './otp.service';
 import { CreateOtpDto, OtpResponseDto } from './dto';
@@ -8,6 +8,17 @@ import { ApiKeyRole } from '../auth/entities/api-key.entity';
 @ApiTags('otp')
 @Controller('otp')
 export class OtpController {
+  @Get()
+  @ApiOperation({ summary: 'List OTP logs with optional filters' })
+  @ApiResponse({ status: 200, description: 'Paginated OTP logs' })
+  async findAll(
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.otpService.findAll({ status, limit: Number(limit) || 50, offset: Number(offset) || 0 });
+  }
+
   constructor(private readonly otpService: OtpService) {}
 
   @Post()

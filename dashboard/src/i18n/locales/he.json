@@ -61,6 +61,7 @@
     "messageTester": "בדיקת הודעות",
     "infrastructure": "תשתית",
     "plugins": "תוספים",
+    "otpLogs": "לוגים של OTP",
     "logs": "לוגים"
   },
   "errorBoundary": {

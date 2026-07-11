@@ -111,6 +111,20 @@ export class OtpService implements OnModuleInit {
     return { otp: saved, whatsappLink };
   }
 
+  async findAll({ status, limit, offset }: { status?: string; limit: number; offset: number }) {
+    const where: Record<string, unknown> = {};
+    if (status && status !== 'all') where.status = status;
+
+    const [data, total] = await this.otpRepository.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+
+    return { data, total };
+  }
+
   async findOne(id: string): Promise<Otp> {
     const otp = await this.otpRepository.findOne({ where: { id } });
     if (!otp) {
