@@ -237,6 +237,13 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
   }
 
   /**
+   * Emit a generic event for a session (e.g. otp.verified, otp.expired)
+   */
+  emitEvent(sessionId: string, event: string, data: Record<string, unknown>) {
+    this.emitToRooms(sessionId, event, data);
+  }
+
+  /**
    * Emit webhook delivery status (broadcast to all - no session context)
    */
   emitWebhookStatus(webhookId: string, success: boolean, error?: string) {

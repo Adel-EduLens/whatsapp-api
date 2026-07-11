@@ -26,6 +26,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { HooksModule } from './core/hooks';
 import { PluginsModule } from './core/plugins';
 import { PluginsApiModule } from './modules/plugins/plugins.module';
+import { OtpModule } from './modules/otp/otp.module';
 
 // Only import QueueModule if explicitly enabled to avoid Redis connection errors
 const queueModules: Array<Type | DynamicModule> = [];
@@ -71,6 +72,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
             __dirname + '/modules/session/**/*.entity{.ts,.js}',
             __dirname + '/modules/webhook/**/*.entity{.ts,.js}',
             __dirname + '/modules/message/**/*.entity{.ts,.js}',
+            __dirname + '/modules/otp/**/*.entity{.ts,.js}',
           ],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           logging: configService.get<boolean>('dataDatabase.logging', false),
@@ -158,6 +160,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
     StatsModule, // Phase 3: Statistics Dashboard
     StatusModule, // Phase 3: Status/Stories API
     CatalogModule, // Phase 3: Catalog API (WhatsApp Business)
+    OtpModule, // OTP verification service
     PluginsApiModule, // Phase 5: Plugins API
   ],
 })

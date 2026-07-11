@@ -23,6 +23,8 @@ export const SUBSCRIBABLE_EVENTS = [
   'group.join',
   'group.leave',
   'group.update',
+  'otp.verified',
+  'otp.expired',
 ] as const;
 
 export type SubscribableEvent = (typeof SUBSCRIBABLE_EVENTS)[number] | '*';

@@ -1,0 +1,171 @@
+{
+  "info": {
+    "name": "OpenWA — OTP Verification",
+    "description": "OTP verification service endpoints.\n\n## Setup\n1. Set `baseUrl` variable to your API URL (default: `http://localhost:2785`)\n2. Set `apiKey` variable to your API key\n\n## Flow\n1. **Register OTP** — creates a pending verification, returns a `whatsappLink`\n2. Give the `whatsappLink` to the user so they send the code via WhatsApp\n3. **Check Status** — poll `GET /otp/:id` or listen via WebSocket for `otp.verified`\n4. **Cancel OTP** — optionally cancel a pending verification\n\n## WebSocket\nConnect to `ws://{{baseUrl}}/events?apiKey={{apiKey}}` and subscribe:\n```json\n{ \"type\": \"subscribe\", \"sessionId\": \"*\", \"events\": [\"otp.verified\", \"otp.expired\"] }\n```",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:2785/api",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "dev-admin-key",
+      "type": "string"
+    },
+    {
+      "key": "otpId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Register OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('otpId', body.id);",
+              "    pm.test('Status is pending', () => pm.expect(body.status).to.eql('pending'));",
+              "    pm.test('Has whatsappLink', () => pm.expect(body.whatsappLink).to.be.a('string'));",
+              "    pm.test('Has expiresAt', () => pm.expect(body.expiresAt).to.be.a('string'));",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"+628123456789\",\n  \"code\": \"4821\",\n  \"sessionId\": \"main\",\n  \"callbackUrl\": \"https://webhook.site/your-id\",\n  \"callbackSecret\": \"my-secret\",\n  \"expiresIn\": 120\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["otp"]
+        },
+        "description": "Register a new OTP verification.\n\n**Required fields:**\n- `phone` — E.164 format (e.g. `+628123456789`)\n- `code` — 4-6 digit numeric code\n- `sessionId` — WhatsApp session name (e.g. `main`)\n\n**Optional fields:**\n- `callbackUrl` — URL to POST result to when verified/expired\n- `callbackSecret` — HMAC-SHA256 secret for signing callbacks\n- `expiresIn` — Seconds until expiry (30-600, default 120)\n\n**Response** includes `whatsappLink` — a `wa.me` URL the user opens to send the code."
+      }
+    },
+    {
+      "name": "Register OTP (minimal)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const body = pm.response.json();",
+              "    pm.collectionVariables.set('otpId', body.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"+628123456789\",\n  \"code\": \"1234\",\n  \"sessionId\": \"main\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["otp"]
+        },
+        "description": "Register OTP with only the required fields — no callback, default 120s expiry."
+      }
+    },
+    {
+      "name": "Check OTP Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const body = pm.response.json();",
+              "    pm.test('Has status field', () => pm.expect(body.status).to.be.oneOf(['pending', 'verified', 'expired', 'cancelled']));",
+              "    pm.test('Has phone field', () => pm.expect(body.phone).to.be.a('string'));",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/otp/{{otpId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["otp", "{{otpId}}"]
+        },
+        "description": "Poll the status of an OTP verification.\n\nPossible statuses:\n- `pending` — waiting for the user to send the code\n- `verified` — user sent the correct code\n- `expired` — OTP timed out\n- `cancelled` — cancelled via DELETE"
+      }
+    },
+    {
+      "name": "Cancel OTP",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns 204 No Content', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/otp/{{otpId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["otp", "{{otpId}}"]
+        },
+        "description": "Cancel a pending OTP verification. Returns 204 on success, 400 if already verified/expired."
+      }
+    }
+  ]
+}
