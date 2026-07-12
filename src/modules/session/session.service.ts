@@ -9,6 +9,7 @@ import {
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
 import { Session, SessionStatus } from './entities/session.entity';
+import { Message, MessageDirection, MessageStatus } from '../message/entities/message.entity';
 import { CreateSessionDto } from './dto';
 import { EngineFactory } from '../../engine/engine.factory';
 import { IWhatsAppEngine, EngineStatus } from '../../engine/interfaces/whatsapp-engine.interface';
@@ -37,6 +38,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
   constructor(
     @InjectRepository(Session, 'data')
     private readonly sessionRepository: Repository<Session>,
+    @InjectRepository(Message, 'data')
+    private readonly messageRepository: Repository<Message>,
     @InjectDataSource('data')
     private readonly dataSource: DataSource,
     private readonly engineFactory: EngineFactory,
@@ -337,6 +340,23 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
               // Plugin stopped processing (e.g., auto-reply handled it)
               return;
             }
+
+            // Save incoming message to database
+            const msgToSave = this.messageRepository.create({
+              sessionId: id,
+              waMessageId: (finalMessage as any).id,
+              chatId: (finalMessage as any).chatId || (finalMessage as any).from,
+              from: (finalMessage as any).from,
+              to: (finalMessage as any).to || 'me',
+              body: (finalMessage as any).body || null,
+              type: (finalMessage as any).type || 'text',
+              direction: MessageDirection.INCOMING,
+              timestamp: (finalMessage as any).timestamp,
+              status: MessageStatus.SENT,
+            });
+            void this.messageRepository.save(msgToSave).catch(err => {
+              this.logger.error('Failed to save incoming message to DB', err instanceof Error ? err.stack : String(err));
+            });
 
             // Dispatch to webhooks with potentially modified message
             void this.webhookService.dispatch(id, 'message.received', finalMessage as Record<string, unknown>);

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SessionService } from '../session/session.service';
@@ -49,11 +49,7 @@ export class MessageService {
     try {
       const result = await engine.sendTextMessage(finalDto.chatId, finalDto.text);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       // Execute hook after successful send
       await this.hookManager.execute(
@@ -96,11 +92,7 @@ export class MessageService {
     try {
       const result = await engine.sendImageMessage(dto.chatId, media);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -127,11 +119,7 @@ export class MessageService {
     try {
       const result = await engine.sendVideoMessage(dto.chatId, media);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -157,11 +145,7 @@ export class MessageService {
     try {
       const result = await engine.sendAudioMessage(dto.chatId, media);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -188,11 +172,7 @@ export class MessageService {
     try {
       const result = await engine.sendDocumentMessage(dto.chatId, media);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -252,11 +232,7 @@ export class MessageService {
         address: dto.address,
       });
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -288,11 +264,7 @@ export class MessageService {
         number: dto.contactNumber,
       });
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -318,11 +290,7 @@ export class MessageService {
     try {
       const result = await engine.sendStickerMessage(dto.chatId, media);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -351,11 +319,7 @@ export class MessageService {
     try {
       const result = await engine.replyToMessage(dto.chatId, dto.quotedMessageId, dto.text);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -384,11 +348,7 @@ export class MessageService {
     try {
       const result = await engine.forwardMessage(dto.fromChatId, dto.toChatId, dto.messageId);
 
-      // Update with actual WhatsApp message ID and status
-      message.waMessageId = result.id;
-      message.status = MessageStatus.SENT;
-      message.timestamp = result.timestamp;
-      await this.messageRepository.save(message);
+      await this.completeMessageSending(sessionId, message, result);
 
       return {
         messageId: result.id,
@@ -489,5 +449,50 @@ export class MessageService {
       filename: dto.filename,
       caption: dto.caption,
     };
+  }
+
+  private async completeMessageSending(sessionId: string, message: Message, result: any): Promise<void> {
+    message.waMessageId = result.id;
+    message.status = MessageStatus.SENT;
+    message.timestamp = result.timestamp;
+    await this.messageRepository.save(message);
+
+    // Schedule checking if contact has responded after 30 seconds
+    this.scheduleResponseCheck(sessionId, message.chatId, message.id);
+  }
+
+  private scheduleResponseCheck(sessionId: string, chatId: string, outgoingMessageId: string, delayMs = 30000) {
+    const logger = new Logger('UnansweredMessageDetector');
+    setTimeout(async () => {
+      try {
+        const outgoingMessage = await this.messageRepository.findOne({
+          where: { id: outgoingMessageId }
+        });
+
+        if (!outgoingMessage || outgoingMessage.status === MessageStatus.FAILED) {
+          return;
+        }
+
+        // Check if there is any incoming message from this contact after the outgoing message was sent
+        const incomingReply = await this.messageRepository.createQueryBuilder('message')
+          .where('message.sessionId = :sessionId', { sessionId })
+          .andWhere('message.chatId = :chatId', { chatId })
+          .andWhere('message.direction = :direction', { direction: MessageDirection.INCOMING })
+          .andWhere('message.createdAt > :sentAt', { sentAt: outgoingMessage.createdAt })
+          .getOne();
+
+        if (!incomingReply) {
+          logger.warn(
+            `[Unanswered Alert] No response received from contact ${chatId} within 30 seconds of sending outgoing message "${outgoingMessage.body?.substring(0, 50) || ''}" (ID: ${outgoingMessage.waMessageId || outgoingMessage.id})`
+          );
+        } else {
+          logger.log(
+            `Contact ${chatId} responded within 30 seconds to message (ID: ${outgoingMessage.waMessageId || outgoingMessage.id})`
+          );
+        }
+      } catch (error) {
+        logger.error('Error checking unanswered message response:', error instanceof Error ? error.stack : String(error));
+      }
+    }, delayMs);
   }
 }

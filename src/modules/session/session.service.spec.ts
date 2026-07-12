@@ -4,6 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { SessionService } from './session.service';
 import { Session, SessionStatus } from './entities/session.entity';
+import { Message } from '../message/entities/message.entity';
 import { EngineFactory } from '../../engine/engine.factory';
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
@@ -30,6 +31,7 @@ function createMockSession(overrides: Partial<Session> = {}): Session {
 describe('SessionService', () => {
   let service: SessionService;
   let repository: jest.Mocked<Partial<Repository<Session>>>;
+  let messageRepository: jest.Mocked<Partial<Repository<Message>>>;
   let dataSource: jest.Mocked<Partial<DataSource>>;
   let engineFactory: jest.Mocked<Partial<EngineFactory>>;
   let eventsGateway: jest.Mocked<Partial<EventsGateway>>;
@@ -40,12 +42,17 @@ describe('SessionService', () => {
   beforeEach(async () => {
     repository = {
       count: jest.fn(),
-      find: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
       remove: jest.fn(),
       update: jest.fn(),
+    };
+
+    messageRepository = {
+      create: jest.fn().mockImplementation(entity => entity),
+      save: jest.fn().mockImplementation(entity => Promise.resolve(entity)),
     };
 
     dataSource = {
@@ -89,6 +96,10 @@ describe('SessionService', () => {
         {
           provide: getRepositoryToken(Session, 'data'),
           useValue: repository,
+        },
+        {
+          provide: getRepositoryToken(Message, 'data'),
+          useValue: messageRepository,
         },
         {
           provide: getDataSourceToken('data'),
