@@ -185,8 +185,6 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
         const messages = m.messages as any[];
         const type = m.type as string;
 
-        this.logger.log(`messages.upsert: type=${type} count=${messages?.length ?? 0}`);
-
         // Track incoming message keys for ALL message types (notify + append)
         // so that markAsRead always has the latest key, even after history sync
         for (const msg of messages) {
@@ -210,6 +208,7 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
 
           // Track the message key for read receipts (persist to survive restarts)
           const keyData = { remoteJid: msg.key.remoteJid, id: msg.key.id, fromMe: false, participant: msg.key.participant };
+          this.logger.log(`Tracking incoming key: remoteJid=${msg.key.remoteJid} id=${msg.key.id}`);
           this.lastIncomingKeys.set(msg.key.remoteJid, keyData);
           
           const resolvedNumber = this.jidToNumber(msg.key.remoteJid);
@@ -232,10 +231,11 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
 
         for (const msg of messages) {
           if (!msg.message || msg.key?.fromMe) {
-            this.logger.log(`Skipping message: hasMessage=${!!msg.message} fromMe=${msg.key?.fromMe} jid=${msg.key?.remoteJid}`);
+            this.logger.log(`Skipping message: hasMessage=${!!msg.message} fromMe=${msg.key?.fromMe} jid=${msg.key?.remoteJid} id=${msg.key?.id}`);
             continue;
           }
-          this.logger.log(`Processing message: remoteJid=${msg.key?.remoteJid} participant=${msg.key?.participant} pushName=${msg.pushName} verifiedBizName=${msg.verifiedBizName} keys=${Object.keys(msg).join(',')}`);
+          this.logger.log(`Processing message: remoteJid=${msg.key?.remoteJid} id=${msg.key?.id} participant=${msg.key?.participant} pushName=${msg.pushName} verifiedBizName=${msg.verifiedBizName} keys=${Object.keys(msg).join(',')}`);
+
 
 
           try {
@@ -911,28 +911,11 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
       try {
         await this.sock.readMessages([key]);
         this.logger.log(`markAsRead: sent readMessages for ${key.remoteJid} (id: ${key.id})`);
-        return;
       } catch (error) {
-        this.logger.warn(`markAsRead: readMessages failed, trying chatModify fallback`, String(error));
+        this.logger.error(`markAsRead: readMessages failed for ${key.remoteJid} (id: ${key.id})`, String(error));
       }
-    }
-
-    // 4. Fallback: use chatModify to mark the entire chat as read
-    //    This works even without the original message key
-    try {
-      await this.sock.chatModify({ markRead: false }, resolvedJid);
-      this.logger.log(`markAsRead: used chatModify to mark ${resolvedJid} as read`);
-    } catch (error) {
-      this.logger.warn(`markAsRead: chatModify also failed for ${resolvedJid}`, String(error));
-      // Last resort: try with the original phone JID
-      if (resolvedJid !== jid) {
-        try {
-          await this.sock.chatModify({ markRead: false }, jid);
-          this.logger.log(`markAsRead: used chatModify with phone JID ${jid} as read`);
-        } catch (innerError) {
-          this.logger.error(`markAsRead: all attempts failed for ${chatId}`, String(innerError));
-        }
-      }
+    } else {
+      this.logger.warn(`markAsRead: no incoming message key found for ${chatId} (resolved: ${resolvedJid})`);
     }
   }
 
