@@ -279,6 +279,24 @@ export class MessageController {
     return { success: true };
   }
 
+  // ========== Mark Read ==========
+
+  @Post('mark-read')
+  @RequireRole(ApiKeyRole.OPERATOR)
+  @ApiOperation({ summary: 'Mark chat/message as read' })
+  @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Chat marked as read',
+  })
+  async markRead(
+    @Param('sessionId') sessionId: string,
+    @Body() dto: { chatId: string; messageId?: string },
+  ): Promise<{ success: boolean }> {
+    await this.messageService.markAsRead(sessionId, dto);
+    return { success: true };
+  }
+
   // ========== Bulk Messaging ==========
 
   @Post('send-bulk')

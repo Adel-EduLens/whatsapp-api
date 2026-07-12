@@ -451,11 +451,24 @@ export class MessageService {
     };
   }
 
+  async markAsRead(sessionId: string, dto: { chatId: string; messageId?: string }): Promise<void> {
+    const engine = this.getEngine(sessionId);
+    await engine.markAsRead(dto.chatId, dto.messageId);
+  }
+
   private async completeMessageSending(sessionId: string, message: Message, result: any): Promise<void> {
     message.waMessageId = result.id;
     message.status = MessageStatus.SENT;
     message.timestamp = result.timestamp;
     await this.messageRepository.save(message);
+
+    // Auto-mark chat as read on sending a reply
+    try {
+      const engine = this.getEngine(sessionId);
+      await engine.markAsRead(message.chatId);
+    } catch (error) {
+      // Ignore errors when auto-marking as read
+    }
 
     // Schedule checking if contact has responded after 30 seconds
     this.scheduleResponseCheck(sessionId, message.chatId, message.id);

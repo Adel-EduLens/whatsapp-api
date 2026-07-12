@@ -787,6 +787,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     this.logger.log(`Deleted message ${messageId} from chat ${chatId} (forEveryone: ${forEveryone})`);
   }
 
+  // Mark Chat as Read
+  async markAsRead(chatId: string, messageId?: string): Promise<void> {
+    this.ensureReady();
+    const chat = await this.client!.getChatById(chatId);
+    await chat.sendSeen();
+    this.logger.log(`Marked chat ${chatId} as read`);
+  }
+
   // Get Profile Picture
   async getProfilePicture(contactId: string): Promise<string | null> {
     this.ensureReady();

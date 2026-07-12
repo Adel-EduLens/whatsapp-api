@@ -64,6 +64,7 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
   private contacts: Map<string, Contact> = new Map();
   // LID → phone number mapping (e.g. "169419766538483" → "201119915593")
   private lidToPhone: Map<string, string> = new Map();
+  private lastIncomingKeys: Map<string, any> = new Map();
 
   constructor(private readonly config: BaileysConfig) {
     super();
@@ -193,6 +194,34 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
             continue;
           }
           this.logger.log(`Processing message: remoteJid=${msg.key?.remoteJid} participant=${msg.key?.participant} pushName=${msg.pushName} verifiedBizName=${msg.verifiedBizName} keys=${Object.keys(msg).join(',')}`);
+
+          // Extract LID-to-phone mapping from the incoming message key if present
+          if (msg.key) {
+            const remoteJid = msg.key.remoteJid;
+            const senderLid = msg.key.senderLid || msg.key.participantLid;
+            const senderPn = msg.key.senderPn || msg.key.participantPn;
+            
+            if (remoteJid?.endsWith('@lid') && senderPn) {
+              const lidNum = remoteJid.split('@')[0].split(':')[0];
+              const phoneNum = senderPn.split('@')[0].split(':')[0];
+              this.updateLidMap([{ id: remoteJid, lid: lidNum, jid: senderPn }]);
+            } else if (senderLid && senderPn) {
+              const lidNum = senderLid.split('@')[0].split(':')[0];
+              const phoneNum = senderPn.split('@')[0].split(':')[0];
+              this.updateLidMap([{ id: `${lidNum}@lid`, lid: lidNum, jid: `${phoneNum}@s.whatsapp.net` }]);
+            }
+          }
+
+          // Track the message key for read receipts
+          if (msg.key?.remoteJid) {
+            this.lastIncomingKeys.set(msg.key.remoteJid, msg.key);
+            
+            const resolvedNumber = this.jidToNumber(msg.key.remoteJid);
+            if (resolvedNumber && resolvedNumber !== msg.key.remoteJid.split('@')[0]) {
+              this.lastIncomingKeys.set(`${resolvedNumber}@s.whatsapp.net`, msg.key);
+              this.lastIncomingKeys.set(`${resolvedNumber}@c.us`, msg.key);
+            }
+          }
 
           try {
             const parsed = await this.parseMessage(msg, { isJidGroup, downloadMediaMessage, getContentType });
@@ -786,6 +815,60 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
     await this.sock.sendMessage(jid, {
       delete: { id: messageId, remoteJid: jid, fromMe: true },
     });
+  }
+
+  async markAsRead(chatId: string, messageId?: string): Promise<void> {
+    this.ensureReady();
+    const jid = this.normalizeJid(chatId);
+    
+    // 1. Try to find the canonical JID (LID) if the input is a phone JID
+    let resolvedJid = jid;
+    if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@c.us')) {
+      const phoneNum = jid.split('@')[0];
+      for (const [l, p] of this.lidToPhone.entries()) {
+        if (p === phoneNum) {
+          resolvedJid = `${l}@lid`;
+          break;
+        }
+      }
+      
+      if (resolvedJid === jid) {
+        try {
+          const [result] = await this.sock.onWhatsApp(phoneNum);
+          if (result && result.exists && result.jid.endsWith('@lid')) {
+            resolvedJid = result.jid;
+            const lidNum = result.jid.split('@')[0];
+            this.updateLidMap([{ id: result.jid, lid: lidNum, jid }]);
+          }
+        } catch (error) {
+          this.logger.warn(`Failed to query onWhatsApp for ${phoneNum}`, String(error));
+        }
+      }
+    }
+
+    // 2. Retrieve the message key
+    let key: any = null;
+    if (this.lastIncomingKeys.has(resolvedJid)) {
+      key = this.lastIncomingKeys.get(resolvedJid);
+    } else if (this.lastIncomingKeys.has(jid)) {
+      key = this.lastIncomingKeys.get(jid);
+    }
+    
+    if (messageId) {
+      key = {
+        remoteJid: resolvedJid,
+        id: messageId,
+        fromMe: false,
+      };
+    }
+
+    // 3. Send read receipt
+    if (key) {
+      await this.sock.readMessages([key]);
+      this.logger.log(`Marked message as read for ${resolvedJid} (id: ${key.id})`);
+    } else {
+      this.logger.warn(`markAsRead in Baileys: no message key found or provided for ${chatId}`);
+    }
   }
 
   // ========== Unsupported: Labels (WhatsApp Business only) ==========
