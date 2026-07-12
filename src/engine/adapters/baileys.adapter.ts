@@ -187,14 +187,10 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
 
         this.logger.log(`messages.upsert: type=${type} count=${messages?.length ?? 0}`);
 
-        if (type !== 'notify') return;
-
+        // Track incoming message keys for ALL message types (notify + append)
+        // so that markAsRead always has the latest key, even after history sync
         for (const msg of messages) {
-          if (!msg.message || msg.key?.fromMe) {
-            this.logger.log(`Skipping message: hasMessage=${!!msg.message} fromMe=${msg.key?.fromMe} jid=${msg.key?.remoteJid}`);
-            continue;
-          }
-          this.logger.log(`Processing message: remoteJid=${msg.key?.remoteJid} participant=${msg.key?.participant} pushName=${msg.pushName} verifiedBizName=${msg.verifiedBizName} keys=${Object.keys(msg).join(',')}`);
+          if (msg.key?.fromMe || !msg.key?.remoteJid) continue;
 
           // Extract LID-to-phone mapping from the incoming message key if present
           if (msg.key) {
@@ -204,7 +200,6 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
             
             if (remoteJid?.endsWith('@lid') && senderPn) {
               const lidNum = remoteJid.split('@')[0].split(':')[0];
-              const phoneNum = senderPn.split('@')[0].split(':')[0];
               this.updateLidMap([{ id: remoteJid, lid: lidNum, jid: senderPn }]);
             } else if (senderLid && senderPn) {
               const lidNum = senderLid.split('@')[0].split(':')[0];
@@ -214,24 +209,34 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
           }
 
           // Track the message key for read receipts (persist to survive restarts)
-          if (msg.key?.remoteJid) {
-            const keyData = { remoteJid: msg.key.remoteJid, id: msg.key.id, fromMe: false, participant: msg.key.participant };
-            this.lastIncomingKeys.set(msg.key.remoteJid, keyData);
-            
-            const resolvedNumber = this.jidToNumber(msg.key.remoteJid);
-            if (resolvedNumber && resolvedNumber !== msg.key.remoteJid.split('@')[0]) {
-              this.lastIncomingKeys.set(`${resolvedNumber}@s.whatsapp.net`, keyData);
-              this.lastIncomingKeys.set(`${resolvedNumber}@c.us`, keyData);
-            }
-            
-            // Also index by plain phone number for easy lookup
-            const phoneNum = this.jidToNumber(msg.key.remoteJid);
-            if (phoneNum) {
-              this.lastIncomingKeys.set(phoneNum, keyData);
-            }
-            
-            this.persistIncomingKeys();
+          const keyData = { remoteJid: msg.key.remoteJid, id: msg.key.id, fromMe: false, participant: msg.key.participant };
+          this.lastIncomingKeys.set(msg.key.remoteJid, keyData);
+          
+          const resolvedNumber = this.jidToNumber(msg.key.remoteJid);
+          if (resolvedNumber && resolvedNumber !== msg.key.remoteJid.split('@')[0]) {
+            this.lastIncomingKeys.set(`${resolvedNumber}@s.whatsapp.net`, keyData);
+            this.lastIncomingKeys.set(`${resolvedNumber}@c.us`, keyData);
           }
+          
+          // Also index by plain phone number for easy lookup
+          const phoneNum = this.jidToNumber(msg.key.remoteJid);
+          if (phoneNum) {
+            this.lastIncomingKeys.set(phoneNum, keyData);
+          }
+          
+          this.persistIncomingKeys();
+        }
+
+        // Only process 'notify' messages for the onMessage callback
+        if (type !== 'notify') return;
+
+        for (const msg of messages) {
+          if (!msg.message || msg.key?.fromMe) {
+            this.logger.log(`Skipping message: hasMessage=${!!msg.message} fromMe=${msg.key?.fromMe} jid=${msg.key?.remoteJid}`);
+            continue;
+          }
+          this.logger.log(`Processing message: remoteJid=${msg.key?.remoteJid} participant=${msg.key?.participant} pushName=${msg.pushName} verifiedBizName=${msg.verifiedBizName} keys=${Object.keys(msg).join(',')}`);
+
 
           try {
             const parsed = await this.parseMessage(msg, { isJidGroup, downloadMediaMessage, getContentType });
