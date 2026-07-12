@@ -98,6 +98,7 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
 
       // Load persisted LID→phone map from previous sessions
       this.loadLidMap();
+      this.loadIncomingKeys();
 
       const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
       this.saveCreds = saveCreds;
@@ -212,15 +213,24 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
             }
           }
 
-          // Track the message key for read receipts
+          // Track the message key for read receipts (persist to survive restarts)
           if (msg.key?.remoteJid) {
-            this.lastIncomingKeys.set(msg.key.remoteJid, msg.key);
+            const keyData = { remoteJid: msg.key.remoteJid, id: msg.key.id, fromMe: false, participant: msg.key.participant };
+            this.lastIncomingKeys.set(msg.key.remoteJid, keyData);
             
             const resolvedNumber = this.jidToNumber(msg.key.remoteJid);
             if (resolvedNumber && resolvedNumber !== msg.key.remoteJid.split('@')[0]) {
-              this.lastIncomingKeys.set(`${resolvedNumber}@s.whatsapp.net`, msg.key);
-              this.lastIncomingKeys.set(`${resolvedNumber}@c.us`, msg.key);
+              this.lastIncomingKeys.set(`${resolvedNumber}@s.whatsapp.net`, keyData);
+              this.lastIncomingKeys.set(`${resolvedNumber}@c.us`, keyData);
             }
+            
+            // Also index by plain phone number for easy lookup
+            const phoneNum = this.jidToNumber(msg.key.remoteJid);
+            if (phoneNum) {
+              this.lastIncomingKeys.set(phoneNum, keyData);
+            }
+            
+            this.persistIncomingKeys();
           }
 
           try {
@@ -404,6 +414,10 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
     return path.resolve(this.config.sessionDataPath, this.config.sessionId, 'lid-map.json');
   }
 
+  private get incomingKeysPath(): string {
+    return path.resolve(this.config.sessionDataPath, this.config.sessionId, 'incoming-keys.json');
+  }
+
   private persistLidMap(): void {
     try {
       const data = Object.fromEntries(this.lidToPhone);
@@ -424,6 +438,29 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
       }
     } catch (error) {
       this.logger.warn('Failed to load LID map', String(error));
+    }
+  }
+
+  private persistIncomingKeys(): void {
+    try {
+      const data = Object.fromEntries(this.lastIncomingKeys);
+      fs.writeFileSync(this.incomingKeysPath, JSON.stringify(data));
+    } catch (error) {
+      this.logger.warn('Failed to persist incoming keys', String(error));
+    }
+  }
+
+  private loadIncomingKeys(): void {
+    try {
+      if (fs.existsSync(this.incomingKeysPath)) {
+        const data = JSON.parse(fs.readFileSync(this.incomingKeysPath, 'utf-8'));
+        for (const [key, value] of Object.entries(data)) {
+          this.lastIncomingKeys.set(key, value);
+        }
+        this.logger.log(`Incoming keys loaded: ${this.lastIncomingKeys.size} entries from disk`);
+      }
+    } catch (error) {
+      this.logger.warn('Failed to load incoming keys', String(error));
     }
   }
 
@@ -820,14 +857,15 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
   async markAsRead(chatId: string, messageId?: string): Promise<void> {
     this.ensureReady();
     const jid = this.normalizeJid(chatId);
+    const phoneNum = jid.split('@')[0];
     
     // 1. Try to find the canonical JID (LID) if the input is a phone JID
     let resolvedJid = jid;
     if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@c.us')) {
-      const phoneNum = jid.split('@')[0];
       for (const [l, p] of this.lidToPhone.entries()) {
         if (p === phoneNum) {
           resolvedJid = `${l}@lid`;
+          this.logger.log(`markAsRead: resolved phone ${phoneNum} → LID ${resolvedJid}`);
           break;
         }
       }
@@ -839,6 +877,7 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
             resolvedJid = result.jid;
             const lidNum = result.jid.split('@')[0];
             this.updateLidMap([{ id: result.jid, lid: lidNum, jid }]);
+            this.logger.log(`markAsRead: resolved phone ${phoneNum} → LID ${resolvedJid} (via onWhatsApp)`);
           }
         } catch (error) {
           this.logger.warn(`Failed to query onWhatsApp for ${phoneNum}`, String(error));
@@ -846,28 +885,49 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
       }
     }
 
-    // 2. Retrieve the message key
+    // 2. Try to find the original message key from persisted keys
     let key: any = null;
-    if (this.lastIncomingKeys.has(resolvedJid)) {
-      key = this.lastIncomingKeys.get(resolvedJid);
-    } else if (this.lastIncomingKeys.has(jid)) {
-      key = this.lastIncomingKeys.get(jid);
-    }
+    // Search by: resolvedJid → original jid → plain phone number
+    key = this.lastIncomingKeys.get(resolvedJid)
+       || this.lastIncomingKeys.get(jid)
+       || this.lastIncomingKeys.get(phoneNum);
     
+    // If a specific messageId was provided, construct a key using the resolved JID
     if (messageId) {
       key = {
-        remoteJid: resolvedJid,
+        remoteJid: key?.remoteJid || resolvedJid,
         id: messageId,
         fromMe: false,
       };
     }
 
-    // 3. Send read receipt
+    // 3. Send read receipt using readMessages if we have a key
     if (key) {
-      await this.sock.readMessages([key]);
-      this.logger.log(`Marked message as read for ${resolvedJid} (id: ${key.id})`);
-    } else {
-      this.logger.warn(`markAsRead in Baileys: no message key found or provided for ${chatId}`);
+      try {
+        await this.sock.readMessages([key]);
+        this.logger.log(`markAsRead: sent readMessages for ${key.remoteJid} (id: ${key.id})`);
+        return;
+      } catch (error) {
+        this.logger.warn(`markAsRead: readMessages failed, trying chatModify fallback`, String(error));
+      }
+    }
+
+    // 4. Fallback: use chatModify to mark the entire chat as read
+    //    This works even without the original message key
+    try {
+      await this.sock.chatModify({ markRead: false }, resolvedJid);
+      this.logger.log(`markAsRead: used chatModify to mark ${resolvedJid} as read`);
+    } catch (error) {
+      this.logger.warn(`markAsRead: chatModify also failed for ${resolvedJid}`, String(error));
+      // Last resort: try with the original phone JID
+      if (resolvedJid !== jid) {
+        try {
+          await this.sock.chatModify({ markRead: false }, jid);
+          this.logger.log(`markAsRead: used chatModify with phone JID ${jid} as read`);
+        } catch (innerError) {
+          this.logger.error(`markAsRead: all attempts failed for ${chatId}`, String(innerError));
+        }
+      }
     }
   }
 

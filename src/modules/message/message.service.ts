@@ -464,25 +464,8 @@ export class MessageService {
 
     // Auto-mark chat as read on sending a reply
     try {
-      const phoneDigits = message.chatId.split('@')[0];
-      const lastIncoming = await this.messageRepository.findOne({
-        where: [
-          {
-            sessionId,
-            from: phoneDigits,
-            direction: MessageDirection.INCOMING,
-          },
-          {
-            sessionId,
-            chatId: message.chatId,
-            direction: MessageDirection.INCOMING,
-          },
-        ],
-        order: { createdAt: 'DESC' },
-      });
-
       const engine = this.getEngine(sessionId);
-      await engine.markAsRead(message.chatId, lastIncoming?.waMessageId);
+      await engine.markAsRead(message.chatId);
     } catch (error) {
       // Ignore errors when auto-marking as read
     }
