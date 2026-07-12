@@ -207,23 +207,36 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
           }
 
           // Track the message key for read receipts (persist to survive restarts)
-          const keyData = { remoteJid: msg.key.remoteJid, id: msg.key.id, fromMe: false, participant: msg.key.participant };
-          this.logger.log(`Tracking incoming key: remoteJid=${msg.key.remoteJid} id=${msg.key.id}`);
-          this.lastIncomingKeys.set(msg.key.remoteJid, keyData);
+          const timestamp = msg.messageTimestamp ? Number(msg.messageTimestamp) : Math.floor(Date.now() / 1000);
+          const existingKey = this.lastIncomingKeys.get(msg.key.remoteJid);
           
-          const resolvedNumber = this.jidToNumber(msg.key.remoteJid);
-          if (resolvedNumber && resolvedNumber !== msg.key.remoteJid.split('@')[0]) {
-            this.lastIncomingKeys.set(`${resolvedNumber}@s.whatsapp.net`, keyData);
-            this.lastIncomingKeys.set(`${resolvedNumber}@c.us`, keyData);
+          if (!existingKey || !existingKey.timestamp || timestamp >= existingKey.timestamp) {
+            const keyData = { 
+              remoteJid: msg.key.remoteJid, 
+              id: msg.key.id, 
+              fromMe: false, 
+              participant: msg.key.participant,
+              timestamp
+            };
+            this.logger.log(`Tracking incoming key: remoteJid=${msg.key.remoteJid} id=${msg.key.id} timestamp=${timestamp}`);
+            this.lastIncomingKeys.set(msg.key.remoteJid, keyData);
+            
+            const resolvedNumber = this.jidToNumber(msg.key.remoteJid);
+            if (resolvedNumber && resolvedNumber !== msg.key.remoteJid.split('@')[0]) {
+              this.lastIncomingKeys.set(`${resolvedNumber}@s.whatsapp.net`, keyData);
+              this.lastIncomingKeys.set(`${resolvedNumber}@c.us`, keyData);
+            }
+            
+            // Also index by plain phone number for easy lookup
+            const phoneNum = this.jidToNumber(msg.key.remoteJid);
+            if (phoneNum) {
+              this.lastIncomingKeys.set(phoneNum, keyData);
+            }
+            
+            this.persistIncomingKeys();
+          } else {
+            this.logger.log(`Skipping key tracking for older/retry packet: remoteJid=${msg.key.remoteJid} id=${msg.key.id} (timestamp: ${timestamp} < current: ${existingKey.timestamp})`);
           }
-          
-          // Also index by plain phone number for easy lookup
-          const phoneNum = this.jidToNumber(msg.key.remoteJid);
-          if (phoneNum) {
-            this.lastIncomingKeys.set(phoneNum, keyData);
-          }
-          
-          this.persistIncomingKeys();
         }
 
         // Only process 'notify' messages for the onMessage callback
@@ -909,8 +922,29 @@ export class BaileysAdapter extends EventEmitter implements IWhatsAppEngine {
     // 3. Send read receipt using readMessages if we have a key
     if (key) {
       try {
-        await this.sock.readMessages([key]);
-        this.logger.log(`markAsRead: sent readMessages for ${key.remoteJid} (id: ${key.id})`);
+        const keysToRead = [key];
+        
+        // If the remoteJid is LID, also try sending a receipt using the phone JID (PN)
+        if (key.remoteJid.endsWith('@lid') && jid !== key.remoteJid) {
+          keysToRead.push({
+            ...key,
+            remoteJid: jid,
+          });
+        }
+        
+        await this.sock.readMessages(keysToRead);
+        this.logger.log(`markAsRead: sent readMessages for keys: ${keysToRead.map(k => `${k.remoteJid} (id: ${k.id})`).join(', ')}`);
+
+        // Also call sendReceipt as a backup for both JIDs
+        try {
+          await this.sock.sendReceipt(key.remoteJid, undefined, [key.id], 'read');
+          if (key.remoteJid.endsWith('@lid') && jid !== key.remoteJid) {
+            await this.sock.sendReceipt(jid, undefined, [key.id], 'read');
+          }
+          this.logger.log(`markAsRead: sent sendReceipt backup for id ${key.id}`);
+        } catch (receiptError) {
+          this.logger.warn(`markAsRead: sendReceipt backup failed: ${String(receiptError)}`);
+        }
       } catch (error) {
         this.logger.error(`markAsRead: readMessages failed for ${key.remoteJid} (id: ${key.id})`, String(error));
       }
