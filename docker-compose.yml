@@ -9,7 +9,7 @@ services:
     profiles: ['with-proxy', 'full']
     restart: unless-stopped
     ports:
-      - '${DASHBOARD_PORT:-80}:80'
+      - '127.0.0.1:2886:80'
       - '127.0.0.1:8080:8080' # Traefik dashboard
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
