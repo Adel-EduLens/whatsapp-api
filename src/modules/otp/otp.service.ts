@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { Otp, OtpStatus } from './entities/otp.entity';
 import { CreateOtpDto } from './dto';
 import { SessionService } from '../session/session.service';
+import { SessionStatus } from '../session/entities/session.entity';
 import { EventsGateway } from '../events/events.gateway';
 import { HookManager } from '../../core/hooks';
 import { createLogger } from '../../common/services/logger.service';
@@ -69,6 +70,10 @@ export class OtpService implements OnModuleInit {
   }> {
     // Resolve session by name to get the actual session ID and phone
     const session = await this.sessionService.findByName(dto.sessionId);
+
+    if (session.status !== SessionStatus.READY) {
+      throw new BadRequestException(`Session '${dto.sessionId}' is not active (current status: ${session.status}). Please start and connect the session first.`);
+    }
 
     if (!session.phone) {
       throw new BadRequestException(`Session '${dto.sessionId}' is not connected — no phone number available`);
