@@ -99,11 +99,23 @@ export function Sessions() {
       const shareUrl = `${window.location.origin}/sessions/${sessionId}/qr/page?token=${token}`;
       if (navigator.share) {
         await navigator.share({ title: `Scan QR - ${currentSessionName.current}`, url: shareUrl });
-      } else {
+      } else if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(shareUrl);
         toast.success(t('sessions.qr.linkCopied'));
+      } else {
+        // Fallback for non-HTTPS
+        const textArea = document.createElement('textarea');
+        textArea.value = shareUrl;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        toast.success(t('sessions.qr.linkCopied'));
       }
-    } catch {
+    } catch (err) {
+      console.error('Share failed:', err);
       toast.error(t('sessions.qr.shareFailed'));
     } finally {
       setSharing(false);
