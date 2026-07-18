@@ -164,7 +164,10 @@
       "preparing": "Preparing QR code...",
       "showQr": "Show QR",
       "loading": "Loading...",
-      "scanToConnect": "Scan QR code to connect"
+      "scanToConnect": "Scan QR code to connect",
+      "share": "Share Link",
+      "linkCopied": "Share link copied to clipboard!",
+      "shareFailed": "Failed to generate share link"
     },
     "details": {
       "title": "Session Details",

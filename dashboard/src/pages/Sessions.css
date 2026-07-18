@@ -625,6 +625,15 @@
   }
 }
 
+.btn-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+}
+
 /* Status Pill for Card Headers */
 .status-pill {
   display: inline-flex;

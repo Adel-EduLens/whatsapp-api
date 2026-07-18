@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { Plus, QrCode, RefreshCw, Trash2, Eye, Loader2, Play, Square, X, Search, Filter } from 'lucide-react';
+import { Plus, QrCode, RefreshCw, Trash2, Eye, Loader2, Play, Square, X, Search, Filter, Share2 } from 'lucide-react';
 import { sessionApi, type Session } from '../services/api';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useToast } from '../components/Toast';
@@ -26,6 +26,7 @@ export function Sessions() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useWebSocket({
     onSessionStatus: useCallback(
@@ -90,6 +91,24 @@ export function Sessions() {
       if (qrRefreshInterval.current) clearInterval(qrRefreshInterval.current);
     };
   }, [qrData, fetchQR]);
+
+  const handleShare = async (sessionId: string) => {
+    try {
+      setSharing(true);
+      const { token } = await sessionApi.createShareLink(sessionId);
+      const shareUrl = `${window.location.origin}/sessions/${sessionId}/qr/page?token=${token}`;
+      if (navigator.share) {
+        await navigator.share({ title: `Scan QR - ${currentSessionName.current}`, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success(t('sessions.qr.linkCopied'));
+      }
+    } catch {
+      toast.error(t('sessions.qr.shareFailed'));
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!newSessionName.trim()) return;
@@ -426,6 +445,14 @@ export function Sessions() {
                   <p className="qr-auto-refresh">
                     <RefreshCw size={14} className="spin-slow" /> {t('sessions.qr.autoRefresh')}
                   </p>
+                  <button
+                    className="btn btn-secondary btn-share"
+                    onClick={() => handleShare(qrData.sessionId)}
+                    disabled={sharing}
+                  >
+                    {sharing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
+                    {t('sessions.qr.share')}
+                  </button>
                 </>
               ) : (
                 <div style={{ padding: '2rem' }}>

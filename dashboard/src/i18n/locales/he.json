@@ -164,7 +164,10 @@
       "preparing": "מכין קוד QR...",
       "showQr": "הצגת QR",
       "loading": "טוען...",
-      "scanToConnect": "יש לסרוק את ה-QR כדי להתחבר"
+      "scanToConnect": "יש לסרוק את ה-QR כדי להתחבר",
+      "share": "שתף קישור",
+      "linkCopied": "קישור השיתוף הועתק!",
+      "shareFailed": "יצירת קישור השיתוף נכשלה"
     },
     "details": {
       "title": "פרטי Session",

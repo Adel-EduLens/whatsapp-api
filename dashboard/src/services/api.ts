@@ -193,6 +193,8 @@ export const sessionApi = {
   start: (id: string) => request<Session>(`/sessions/${id}/start`, { method: 'POST' }),
   stop: (id: string) => request<Session>(`/sessions/${id}/stop`, { method: 'POST' }),
   getQR: (id: string) => request<{ qrCode: string; status: string }>(`/sessions/${id}/qr`),
+  createShareLink: (id: string, ttl?: number) =>
+    request<{ token: string; expiresAt: string }>(`/sessions/${id}/qr/share${ttl ? `?ttl=${ttl}` : ''}`, { method: 'POST' }),
   getStats: () => request<SessionStats>('/sessions/stats/overview'),
   getGroups: (id: string) => request<{ id: string; name: string }[]>(`/sessions/${id}/groups`),
 };
