@@ -449,7 +449,7 @@ export class SessionController {
     async function fetchQR() {
       if (connected) return;
       try {
-        const res = await fetch(\`/sessions/\${sessionId}/qr/data?token=\${token}\`);
+        const res = await fetch(\`/api/sessions/\${sessionId}/qr/data?token=\${token}\`);
         if (res.status === 401) {
           contentEl.innerHTML = '<p class="message expired">Link has expired. Please request a new one.</p>';
           instructionsEl.style.display = 'none';

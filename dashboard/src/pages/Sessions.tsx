@@ -96,7 +96,7 @@ export function Sessions() {
     try {
       setSharing(true);
       const { token } = await sessionApi.createShareLink(sessionId);
-      const shareUrl = `${window.location.origin}/sessions/${sessionId}/qr/page?token=${token}`;
+      const shareUrl = `${window.location.origin}/api/sessions/${sessionId}/qr/page?token=${token}`;
       if (navigator.share) {
         await navigator.share({ title: `Scan QR - ${currentSessionName.current}`, url: shareUrl });
       } else if (navigator.clipboard && window.isSecureContext) {
