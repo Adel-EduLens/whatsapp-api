@@ -6,6 +6,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
 import { Session, SessionStatus } from './entities/session.entity';
@@ -25,6 +26,11 @@ interface ReconnectState {
   baseDelay: number;
 }
 
+interface ShareToken {
+  sessionId: string;
+  expiresAt: number;
+}
+
 @Injectable()
 export class SessionService implements OnModuleDestroy, OnModuleInit {
   private readonly logger = createLogger('SessionService');
@@ -34,6 +40,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
 
   // Reconnection state per session
   private reconnectStates: Map<string, ReconnectState> = new Map();
+
+  // Share tokens for public QR code pages
+  private shareTokens: Map<string, ShareToken> = new Map();
 
   constructor(
     @InjectRepository(Session, 'data')
@@ -588,5 +597,44 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
    */
   isActive(id: string): boolean {
     return this.engines.has(id);
+  }
+
+  /**
+   * Create a temporary share token for public QR code access
+   */
+  async createShareToken(id: string, ttlMinutes: number = 10): Promise<{ token: string; expiresAt: Date }> {
+    await this.findOne(id); // Verify session exists
+
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + ttlMinutes * 60 * 1000;
+
+    this.shareTokens.set(token, { sessionId: id, expiresAt });
+
+    // Auto-cleanup expired token
+    setTimeout(() => {
+      this.shareTokens.delete(token);
+    }, ttlMinutes * 60 * 1000);
+
+    return { token, expiresAt: new Date(expiresAt) };
+  }
+
+  /**
+   * Validate a share token and return the session ID
+   */
+  validateShareToken(token: string): string | null {
+    const entry = this.shareTokens.get(token);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.shareTokens.delete(token);
+      return null;
+    }
+    return entry.sessionId;
+  }
+
+  /**
+   * Revoke a share token
+   */
+  revokeShareToken(token: string): boolean {
+    return this.shareTokens.delete(token);
   }
 }
