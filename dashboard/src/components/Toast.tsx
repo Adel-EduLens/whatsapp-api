@@ -45,7 +45,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
 
   const addToast = useCallback(
     (toast: Omit<Toast, 'id'>) => {
-      const id = crypto.randomUUID();
+      const id = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
       const newToast = { ...toast, id };
       setToasts(prev => [...prev, newToast]);
 
