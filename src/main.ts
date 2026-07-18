@@ -77,20 +77,20 @@ async function bootstrap() {
   });
 
   // Enhanced Security Headers (Phase 3 Security Audit)
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:', 'https:'],
-          connectSrc: ["'self'"],
-          fontSrc: ["'self'"],
-          objectSrc: ["'none'"],
-          upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
-        },
+  // Skip helmet for public QR share pages (they use inline scripts)
+  const helmetMiddleware = helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
       },
+    },
       hsts: {
         maxAge: 31536000,
         includeSubDomains: true,
@@ -100,8 +100,14 @@ async function bootstrap() {
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
       // Disable for API usage
       crossOriginResourcePolicy: { policy: 'cross-origin' },
-    }),
-  );
+    });
+  app.use((req: any, res: any, next: any) => {
+    // Skip CSP for public QR share pages (inline scripts needed)
+    if (req.url.includes('/qr/page')) {
+      return next();
+    }
+    return helmetMiddleware(req, res, next);
+  });
 
   // CORS Configuration (Phase 3 Security Audit)
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || ['*'];
