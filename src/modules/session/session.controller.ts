@@ -381,39 +381,6 @@ export class SessionController {
       color: #64748b;
       margin-top: 1rem;
     }
-    .share-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-top: 1.25rem;
-      padding: 0.625rem 1.25rem;
-      background: #334155;
-      color: #e2e8f0;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .share-btn:hover { background: #475569; }
-    .share-btn:active { background: #1e293b; }
-    .share-btn svg { width: 16px; height: 16px; }
-    .share-toast {
-      position: fixed;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #22c55e;
-      color: #fff;
-      padding: 0.5rem 1.25rem;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      opacity: 0;
-      transition: opacity 0.3s;
-      pointer-events: none;
-    }
-    .share-toast.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -432,11 +399,6 @@ export class SessionController {
           <li>Tap <strong>Link a Device</strong> and scan the code</li>
         </ol>
       </div>
-      <button class="share-btn" id="share-btn" onclick="shareLink()">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-        Share Link
-      </button>
-      <div class="share-toast" id="toast">Link copied!</div>
     </div>
   </div>
   <script>
@@ -488,19 +450,6 @@ export class SessionController {
     function formatStatus(s) {
       const map = { qr_ready: 'Scan QR Code', initializing: 'Initializing...', authenticating: 'Authenticating...', ready: 'Connected', disconnected: 'Disconnected', failed: 'Failed', created: 'Created' };
       return map[s] || s;
-    }
-
-    function shareLink() {
-      const url = window.location.href;
-      if (navigator.share) {
-        navigator.share({ title: 'Scan QR - ' + document.getElementById('session-name').textContent, url });
-      } else {
-        navigator.clipboard.writeText(url).then(() => {
-          const toast = document.getElementById('toast');
-          toast.classList.add('show');
-          setTimeout(() => toast.classList.remove('show'), 2000);
-        });
-      }
     }
 
     fetchQR();
