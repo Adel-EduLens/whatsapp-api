@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Delete, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { OtpService } from './otp.service';
 import { CreateOtpDto, OtpResponseDto } from './dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
@@ -10,13 +10,21 @@ import { ApiKeyRole } from '../auth/entities/api-key.entity';
 export class OtpController {
   @Get()
   @ApiOperation({ summary: 'List OTP logs with optional filters' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by OTP status' })
+  @ApiQuery({ name: 'sessionId', required: false, description: 'Filter by WhatsApp instance/session ID' })
   @ApiResponse({ status: 200, description: 'Paginated OTP logs' })
   async findAll(
     @Query('status') status?: string,
+    @Query('sessionId') sessionId?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    return this.otpService.findAll({ status, limit: Number(limit) || 50, offset: Number(offset) || 0 });
+    return this.otpService.findAll({
+      status,
+      sessionId,
+      limit: Number(limit) || 50,
+      offset: Number(offset) || 0,
+    });
   }
 
   constructor(private readonly otpService: OtpService) {}

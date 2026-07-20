@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Search, Filter, Loader2, ShieldCheck, Clock, XCircle, Ban } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, Filter, Loader2, ShieldCheck, Clock, XCircle, Ban, Server } from 'lucide-react';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useSessionsQuery } from '../hooks/queries';
 import { PageHeader } from '../components/PageHeader';
 import { useQuery } from '@tanstack/react-query';
 import { request } from '../services/api';
@@ -37,18 +38,26 @@ const LIMIT = 25;
 export function OtpLogs() {
   useDocumentTitle('OTP Logs');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [instanceFilter, setInstanceFilter] = useState('all');
   const [search, setSearch]             = useState('');
   const [page, setPage]                 = useState(1);
+
+  const { data: instances = [] } = useSessionsQuery();
+  const instanceNames = useMemo(
+    () => new Map(instances.map(instance => [instance.id, instance.name])),
+    [instances],
+  );
 
   const offset = (page - 1) * LIMIT;
   const queryParams = new URLSearchParams({
     limit:  String(LIMIT),
     offset: String(offset),
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(instanceFilter !== 'all' ? { sessionId: instanceFilter } : {}),
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['otp-logs', statusFilter, page],
+    queryKey: ['otp-logs', statusFilter, instanceFilter, page],
     queryFn:  () => request<{ data: OtpLog[]; total: number }>(`/otp?${queryParams}`),
     staleTime: 15_000,
   });
@@ -57,11 +66,17 @@ export function OtpLogs() {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / LIMIT);
 
-  const filtered = logs.filter(l =>
-    l.phone.includes(search) ||
-    l.code.includes(search) ||
-    l.id.includes(search),
-  );
+  const normalizedSearch = search.toLowerCase();
+  const filtered = logs.filter(l => {
+    const instanceName = instanceNames.get(l.sessionId) ?? '';
+    return (
+      l.phone.toLowerCase().includes(normalizedSearch) ||
+      l.code.toLowerCase().includes(normalizedSearch) ||
+      l.id.toLowerCase().includes(normalizedSearch) ||
+      l.sessionId.toLowerCase().includes(normalizedSearch) ||
+      instanceName.toLowerCase().includes(normalizedSearch)
+    );
+  });
 
   const fmt = (d: string) => new Date(d).toLocaleString();
   const timeAgo = (d: string) => {
@@ -93,7 +108,7 @@ export function OtpLogs() {
           <Search size={18} />
           <input
             type="text"
-            placeholder="Search by phone, code or ID…"
+            placeholder="Search by phone, code, ID or instance…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
@@ -107,6 +122,20 @@ export function OtpLogs() {
             <option value="verified">Verified</option>
             <option value="expired">Expired</option>
             <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <Server size={16} />
+          <select
+            aria-label="Filter by instance"
+            value={instanceFilter}
+            onChange={e => { setInstanceFilter(e.target.value); setPage(1); }}
+          >
+            <option value="all">All instances</option>
+            {instances.map(instance => (
+              <option key={instance.id} value={instance.id}>{instance.name}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -135,6 +164,7 @@ export function OtpLogs() {
           <thead>
             <tr>
               <th>Status</th>
+              <th>Instance</th>
               <th>Phone</th>
               <th>Code</th>
               <th>Callback URL</th>
@@ -146,7 +176,7 @@ export function OtpLogs() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="otp-empty">
+                <td colSpan={8} className="otp-empty">
                   <ShieldCheck size={40} strokeWidth={1} />
                   <p>No OTP records found</p>
                 </td>
@@ -158,6 +188,12 @@ export function OtpLogs() {
                     <span className={`otp-status-badge ${log.status}`}>
                       {STATUS_ICON[log.status]}
                       {STATUS_LABEL[log.status]}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="otp-instance" title={log.sessionId}>
+                      <Server size={14} />
+                      {instanceNames.get(log.sessionId) ?? log.sessionId}
                     </span>
                   </td>
                   <td className="otp-phone">{log.phone}</td>
